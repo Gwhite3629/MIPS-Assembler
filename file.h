@@ -49,4 +49,39 @@ int trim(char *line, char ***trimmed);
 // Returns 0 on success
 int semitrim(char *line, char **semitrimmed, int *count);
 
+char *reg_lookup(char *name);
+
+#define zero "00000"
+#define at "00001"
+#define v0 "00010"
+#define v1 "00011"
+#define a0 "00100"
+#define a1 "00101"
+#define a2 "00110"
+#define a3 "00111"
+#define t0 "01000"
+#define t1 "01001"
+#define t2 "01010"
+#define t3 "01011"
+#define t4 "01100"
+#define t5 "01101"
+#define t6 "01110"
+#define t7 "01111"
+#define s0 "10000"
+#define s1 "10001"
+#define s2 "10010"
+#define s3 "10011"
+#define s4 "10100"
+#define s5 "10101"
+#define s6 "10110"
+#define s7 "10111"
+#define t8 "11000"
+#define t9 "11001"
+#define k0 "11010"
+#define k1 "11011"
+#define gp "11100"
+#define sp "11101"
+#define fp "11110"
+#define ra "11111"
+
 #endif // _FILE_H_

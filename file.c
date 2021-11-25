@@ -207,3 +207,44 @@ int semitrim(char *line, char **semitrimmed, int *count)
 fail:
   return ret;
 }
+
+char *reg_lookup(char* name){
+  char *reg = NULL;
+  reg = malloc(5*sizeof(char));
+
+  if (strcmp(name, "zero") == 0) reg = zero;
+  else if (strcmp(name, "at") == 0) reg = at;
+  else if (strcmp(name, "v0") == 0) reg = v0;
+  else if (strcmp(name, "v1") == 0) reg = v1;
+  else if (strcmp(name, "a0") == 0) reg = a0;
+  else if (strcmp(name, "a1") == 0) reg = a1;
+  else if (strcmp(name, "a2") == 0) reg = a2;
+  else if (strcmp(name, "a3") == 0) reg = a3;
+  else if (strcmp(name, "t0") == 0) reg = t0;
+  else if (strcmp(name, "t1") == 0) reg = t1;
+  else if (strcmp(name, "t2") == 0) reg = t2;
+  else if (strcmp(name, "t3") == 0) reg = t3;
+  else if (strcmp(name, "t4") == 0) reg = t4;
+  else if (strcmp(name, "t5") == 0) reg = t5;
+  else if (strcmp(name, "t6") == 0) reg = t6;
+  else if (strcmp(name, "t7") == 0) reg = t7;
+  else if (strcmp(name, "s0") == 0) reg = s0;
+  else if (strcmp(name, "s1") == 0) reg = s1;
+  else if (strcmp(name, "s2") == 0) reg = s2;
+  else if (strcmp(name, "s3") == 0) reg = s3;
+  else if (strcmp(name, "s4") == 0) reg = s4;
+  else if (strcmp(name, "s5") == 0) reg = s5;
+  else if (strcmp(name, "s6") == 0) reg = s6;
+  else if (strcmp(name, "s7") == 0) reg = s7;
+  else if (strcmp(name, "t8") == 0) reg = t8;
+  else if (strcmp(name, "t9") == 0) reg = t9;
+  else if (strcmp(name, "k0") == 0) reg = k0;
+  else if (strcmp(name, "k1") == 0) reg = k1;
+  else if (strcmp(name, "gp") == 0) reg = gp;
+  else if (strcmp(name, "sp") == 0) reg = sp;
+  else if (strcmp(name, "fp") == 0) reg = fp;
+  else if (strcmp(name, "ra") == 0) reg = ra;
+  else reg = zero;
+
+  return reg;
+}
