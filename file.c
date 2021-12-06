@@ -67,10 +67,10 @@ int parse(char *line, int flag, FILE *file, data *data, labels *labels)
   if (ret != 0)
     goto fail;
 
-  /*  while(trimmed[i] != NULL) {
+  while(trimmed[i] != NULL) {
     printf("Segment: \"%s\"\n", trimmed[i]);
     i++;
-  }*/
+  }
 
 fail:
   if (trimmed)

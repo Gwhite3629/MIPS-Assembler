@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-int main(int argc, char *argv[])
+int main(void)
 {
     // Files and random variables
     FILE *input;
@@ -44,7 +44,10 @@ int main(int argc, char *argv[])
     flag = 0;
 
     // Open source file
-    input = fopen(argv[1], "r");
+    char fname[64];
+    printf("Type name of file to open:\n");
+    scanf("%s",fname);
+    input = fopen(fname, "r");
     if (input == NULL)
         goto fail;
 
@@ -61,7 +64,7 @@ int main(int argc, char *argv[])
     {
         if (fgets(buf, 256, input) == NULL)
             break;
-        printf("Buf: \"%s\"\n", buf);
+        //printf("Buf: \"%s\"\n", buf);
         if (buf[0] != '\n')
             exit = parse(buf, flag, dat, dat_mem, ins_mem);
     }
@@ -90,7 +93,7 @@ int main(int argc, char *argv[])
     {
         if (fgets(buf, 256, input) == NULL)
             break;
-        printf("Buf: \"%s\"\n", buf);
+        //printf("Buf: \"%s\"\n", buf);
         if (buf[0] != '\n')
             exit = parse(buf, flag, ins, dat_mem, ins_mem);
     }
