@@ -73,8 +73,12 @@ int parse(char *line, int flag, FILE *file, data *data, labels *labels)
   }
 
 fail:
+  for (int j = i-1;j>=0;j--) {
+	if (trimmed[j])
+		free(trimmed[j]);
+  }
   if (trimmed)
-    free(trimmed);
+	free(trimmed);
   return ret;
 }
 
