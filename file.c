@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 #include "file.h"
 
@@ -51,7 +52,7 @@ fail:
   return -1;
 }
 
-int parse(char *line, int flag, FILE *file, data *data, labels *labels)
+int parse(char *line, int line_num, int flag, FILE *file, int *data_num, labels *labels)
 {
   // Variables
   int ret = 0;
@@ -63,13 +64,24 @@ int parse(char *line, int flag, FILE *file, data *data, labels *labels)
 
   //printf("line: \"%s\"\n", line);
 
-  ret = trim(line, &trimmed);
+  ret = trim(line, line_num, flag, labels, data_num, &trimmed);
   if (ret != 0)
     goto fail;
 
+  // Count words
   while(trimmed[i] != NULL) {
     printf("Segment: \"%s\"\n", trimmed[i]);
     i++;
+  }
+
+  switch (flag) {
+    case 0:
+      handle_data(trimmed, file, data_num);
+      break;
+    case 1: break;
+    case 2:
+      handle_instruction(trimmed, file, labels, i);
+      break;
   }
 
 fail:
@@ -82,7 +94,7 @@ fail:
   return ret;
 }
 
-int trim(char *line, char ***trimmed)
+int trim(char *line, int line_num, int flag, labels *labels, int *data_num, char ***trimmed)
 {
   // Variables
   int decr = 0;
@@ -99,6 +111,22 @@ int trim(char *line, char ***trimmed)
   if (ret != 0)
     goto fail;
 
+  int size = strcspn(semitrimmed, ":");
+  if (size != strlen(semitrimmed)) {
+    printf("Size: %d\n", size);
+    strncpy(labels->labels[(*labels).num].name, line, size);
+    switch (flag) {
+      case 0:
+        labels->labels[(*labels).num].address = *data_num;
+        labels->num++;
+        break;
+      case 1:
+        labels->labels[(*labels).num].address = line_num;
+        labels->num++;
+        break;
+      case 2: break;
+    }
+  }
   //printf("semitrimmed: \"%s\"\n", semitrimmed);
 
   // Return number of spaces of semitrimmed line
@@ -231,77 +259,390 @@ fail:
   return ret;
 }
 
-char *reg_lookup(char *name)
-{
-  char *reg = NULL;
-  reg = malloc(5 * sizeof(char));
 
-  if (strcmp(name, "zero") == 0)
-    reg = zero;
-  else if (strcmp(name, "at") == 0)
-    reg = at;
-  else if (strcmp(name, "v0") == 0)
-    reg = v0;
-  else if (strcmp(name, "v1") == 0)
-    reg = v1;
-  else if (strcmp(name, "a0") == 0)
-    reg = a0;
-  else if (strcmp(name, "a1") == 0)
-    reg = a1;
-  else if (strcmp(name, "a2") == 0)
-    reg = a2;
-  else if (strcmp(name, "a3") == 0)
-    reg = a3;
-  else if (strcmp(name, "t0") == 0)
-    reg = t0;
-  else if (strcmp(name, "t1") == 0)
-    reg = t1;
-  else if (strcmp(name, "t2") == 0)
-    reg = t2;
-  else if (strcmp(name, "t3") == 0)
-    reg = t3;
-  else if (strcmp(name, "t4") == 0)
-    reg = t4;
-  else if (strcmp(name, "t5") == 0)
-    reg = t5;
-  else if (strcmp(name, "t6") == 0)
-    reg = t6;
-  else if (strcmp(name, "t7") == 0)
-    reg = t7;
-  else if (strcmp(name, "s0") == 0)
-    reg = s0;
-  else if (strcmp(name, "s1") == 0)
-    reg = s1;
-  else if (strcmp(name, "s2") == 0)
-    reg = s2;
-  else if (strcmp(name, "s3") == 0)
-    reg = s3;
-  else if (strcmp(name, "s4") == 0)
-    reg = s4;
-  else if (strcmp(name, "s5") == 0)
-    reg = s5;
-  else if (strcmp(name, "s6") == 0)
-    reg = s6;
-  else if (strcmp(name, "s7") == 0)
-    reg = s7;
-  else if (strcmp(name, "t8") == 0)
-    reg = t8;
-  else if (strcmp(name, "t9") == 0)
-    reg = t9;
-  else if (strcmp(name, "k0") == 0)
-    reg = k0;
-  else if (strcmp(name, "k1") == 0)
-    reg = k1;
-  else if (strcmp(name, "gp") == 0)
-    reg = gp;
-  else if (strcmp(name, "sp") == 0)
-    reg = sp;
-  else if (strcmp(name, "fp") == 0)
-    reg = fp;
-  else if (strcmp(name, "ra") == 0)
-    reg = ra;
-  else
-    reg = zero;
+// Register definitions
+pair reg[32] = {{"zero", 0},   {"at", 1}, {"v0", 2}, {"v1", 3},
+                {"a0", 4},     {"a1", 5}, {"a2", 6}, {"a3", 7},
+                {"t0", 8},     {"t1", 9}, {"t2", 10},{"t3", 11},
+                {"t4", 12},    {"t5", 13},{"t6", 14},{"t7", 15},
+                {"s0", 16},    {"s1", 17},{"s2", 18},{"s3", 19},
+                {"s4", 20},    {"s5", 21},{"s6", 22},{"s7", 23},
+                {"t8", 24},    {"t9", 25},{"k0", 26},{"k1", 27},
+                {"gp", 28},    {"sp", 29},{"fp", 30},{"ra", 31}};
 
-  return reg;
+// OP code definitions
+triplet opcode[43] = {{"add", {0, R}},    {"addu", {0, R}},  {"and", {0, R}},   {"jr", {0, R}},
+                      {"nor", {0, R}},    {"or", {0, R}},    {"bltz", {1, I}},  {"j", {2, J}},     
+                      {"jal", {3, J}},    {"slt", {0, R}},   {"sltu", {0, R}},  {"sll",{0, R}},
+                      {"srl", {0, R}},    {"sub", {0, R}},   {"subu", {0, R}},
+                      {"beq", {4, I}},    {"bne", {5, I}},   {"blez", {6, I}},  {"bgtz", {7, I}},
+                      {"addi", {8, I}},   {"addiu", {9, I}}, {"slti", {10, I}}, {"sltiu", {11, I}},
+                      {"andi", {12, I}},  {"ori", {13, I}},  {"xori", {14, I}}, {"lui", {15, I}},
+                      {"lb", {16, I}},    {"lh", {17, I}},   {"lwl", {18, I}},  {"lw", {19, I}},
+                      {"lbu", {20, I}},   {"lhu", {21, I}},  {"lwr", {22, I}},  {"sb", {23, I}},
+                      {"sh", {24, I}},    {"swl", {25, I}},  {"sw", {26, I}},   {"swr", {27, I}},
+                      {"ll", {28, I}},    {"lwcl", {29, I}}, {"sc", {30, I}},   {"swcl", {31, I}}};
+
+// Function code definitions
+pair func[26] = {{"sll", 0}, {"srl", 2},  {"sra", 3},  {"sllv", 4},
+                 {"srlv", 6},{"srav", 7}, {"jr", 8},   {"jalr", 9},
+                 {"mfhi", 16},{"mthi", 17}, {"mflo", 18}, {"mtlo", 19},
+                 {"mult", 24},{"multu", 25},{"div", 26},  {"divu", 27},
+                 {"add", 32}, {"addu", 33}, {"sub", 34},  {"subu", 35},
+                 {"and", 36}, {"or", 37},   {"xor", 38},  {"nor", 39},
+                 {"slt", 42}, {"sltu", 43}};
+
+pair pseudo[8] = {{"move", 0},{"li", 1},
+                  {"la", 2},  {"blt", 3},
+                  {"ble", 4}, {"bgt", 5},
+                  {"bge", 6}, {"b", 9}};
+
+static int compare_keys_pair(const void *va, const void *vb) {
+  const pair *a = va, *b = vb;
+  return strcmp(a->key, b->key);
+}
+
+static int compare_keys_triplet(const void *va, const void *vb) {
+  const triplet *a = va, *b = vb;
+  return strcmp(a->key, b-> key);
+}
+
+static int compare_keys_label(const void *va, const void *vb) {
+  const label *a = va, *b = vb;
+  return strcmp(a->name, b->name);
+}
+
+int get_value_pair(char *key, pair *table){
+  pair key_pair[1] = {{key}};
+  pair *p = bsearch(key_pair, table, sizeof table / sizeof table[0], sizeof table, compare_keys_pair);
+  return p ? p->val : -1;
+}
+
+int get_value_labels(char *key, label *labels){
+  label key_pair[1] = {{key}};
+  label *l = bsearch(key_pair, labels, sizeof labels / sizeof labels[0], sizeof labels, compare_keys_label);
+  return l ? l->address : -1;
+}
+
+dat get_value_tripet(char *key){
+  dat r = {-1, -1};
+  triplet key_pair[1] = {{key}};
+  triplet *t = bsearch(key_pair, opcode, sizeof opcode / sizeof opcode[0], sizeof opcode, compare_keys_triplet);
+  return t ? t->data : r;
+}
+
+int handle_data(char *trimmed, FILE *file, int *data_num) {
+  int i = 0;
+  while (trimmed[i] != NULL) {
+    if (strcspn(trimmed, "0123456789")!=strlen(trimmed)) {
+      (*data_num)++;
+      fprintf(file, "%08x\n", strtol(trimmed, NULL, 10));
+    }
+    i++;
+  }
+  return 0;
+}
+
+int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
+  int chk = 0;
+  int label_addr = 0;
+  int rs;
+  int rt;
+  int rd;
+  int shamt;
+  int func;
+  dat op;
+  // Check if line is not just a label
+  if (i > 1 & (strcspn(trimmed[0], ":") == strlen(trimmed[0]))) {
+    // Check if opcode is a pseudo-instruction, note: fails on labels
+    if (chk = get_value_pair(trimmed[0], pseudo) != -1) {
+      switch (chk) {
+        // move rd rt
+        case 0:
+          rs = 0;
+          rt = get_value_pair(trimmed[2], reg);
+          rd = get_value_pair(trimmed[1], reg);
+          shamt = 0;
+          // addu rd $0 rt
+          fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(rd<<11)+(shamt<<6)+(33));
+          break;
+        // li rd immed
+        case 1:
+          rt = 0;
+          rd = get_val_pair(trimmed[1], reg);
+          // ori rd $0 immed
+          fprintf(file, "%08x\n", (13<<26)+(rt<<21)+(rd<<16)+(trimmed[i-1]));
+          break;
+        // la rd label
+        case 2: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          // LUI $at, 0x10010000
+          fprintf(file, "%08x\n", (15<<26)+(1<<21)+(268500992));
+          rt = 1;
+          rd = get_value_pair(trimmed[1], reg);
+          // ori rd $at immed
+          fprintf(file, "%08x\n", (13<<26)+(rt<<21)+(rd<<16)+(label_addr));
+          break;
+        // blt rs rt label
+        case 3: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          rs = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[2], reg);
+          //slt $at rs rt
+          fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(1<<11)+(0<<6)+(42));
+          //bne $at $0 label
+          fprintf(file, "%08x\n", (5<<26)+(1<<21)+(0<<16)+(label_addr));
+          break;
+        // ble rs, rt, label
+        case 4: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          rs = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[2], reg);
+          //slt $at rt rs
+          fprintf(file, "%08x\n", (0<<26)+(rt<<26)+(rs<<16)+(1<<11)+(0<<6)+(42));
+          //beq $at $0 label
+          fprintf(file, "%08x\n", (4<<26)+(1<<21)+(0<<16)+(label_addr));
+          break;
+        // bgt rs rt label
+        case 5:
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          rs = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[2], reg);
+          //slt $at rt rs
+          fprintf(file, "%08x\n", (0<<26)+(rt<<26)+(rs<<16)+(1<<11)+(0<<6)+(42));
+          //bne $at $0 label
+          fprintf(file, "%08x\n", (5<<26)+(1<<21)+(0<<16)+(label_addr));
+          break;
+        // bge rs rt label
+        case 6: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          rs = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[2], reg);
+          //slt $at rs rt
+          fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(1<<11)+(0<<6)+(42));
+          //beq $at $0 label
+          fprintf(file, "%08x\n", (4<<26)+(1<<21)+(0<<16)+(label_addr));
+          break;
+        // b label
+        case 7: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          //beq $0 $0 label
+          fprintf(file, "%08x\n", (4<<26)+(0<<21)+(0<<21)+(label_addr));
+          break;
+      }
+    // Operates on non-pseudo instructions
+    } else {
+      op = get_value_triplet(trimmed[0]);
+      // Confirms opcode is valid
+      if (op.val != -1) {
+        // Operates on instructions with labels
+        if (label_addr = get_value_labels(trimmed[i-1], labels->labels) != -1) {
+          // Check LW pseudo condition
+          if (op.val == 19) {
+            // LUI $at, 0x10010000
+            fprintf(file, "%08x\n", (15<<26)+(1<<21)+(268500992));
+            rs = get_value_pair(trimmed[2], reg);
+            rt = get_value_pair(trimmed[1], reg);
+            fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(label_addr));
+          } else {
+            switch (op.val) {
+              case 1:
+                rs = get_value_pair(trimmed[2], reg);
+                rt = get_value_pair(trimmed[1], reg);
+                fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(label_addr));
+                break;
+              case 2:
+                fprintf(file, "%08x\n", (op.val<<26)+(label_addr));
+                break;
+            }
+          }
+        // Operate on non-label instructions
+        } else {
+          switch (op.type) {
+            // R-type
+            case 0: break;
+              func = get_value_pair(trimmed[0], func);
+              switch(func) {
+                case (0|2|3|4|6|7):
+                  rs = 0;
+                  rt = get_value_pair(trimmed[2], reg);
+                  rd = get_value_pair(trimmed[1], reg);
+                  shamt = trimmed[i-1];
+                  break;
+                case (8):
+                  rs = get_value_pair(trimmed[1], reg);
+                  rt = 0;
+                  rd = 0;
+                  shamt = 0;
+                  break;
+                case (9):
+                  rs = get_value_pair(trimmed[2], reg);
+                  rt = 0;
+                  rd = get_value_pair(trimmed[1], reg);
+                  shamt = 0;
+                  break;
+                case (32|33|34|35|36|37|38|39|42|43):
+                  rs = get_value_pair(trimmed[2], reg);
+                  rt = get_value_pair(trimmed[3], reg);
+                  rd = get_value_pair(trimmed[1], reg);
+                  shamt = 0;
+                  break;
+              }
+              fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(rd<<11)+(shamt<<6)+(func));
+            // I-type
+            case 1: 
+              rs = get_value_pair(trimmed[2], reg);
+              rt = get_value_pair(trimmed[1], reg);
+              fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(trimmed[i-1]));
+              break;
+          }
+        }
+      }
+    }
+  // If first word of line was a label, opcode is second
+  } else if (i > 1) {
+    // Find pseudos
+    if (chk = get_value_pair(trimmed[1], pseudo) != -1) {
+      switch (chk) {
+        // move rd rt
+        case 0:
+          rs = 0;
+          rt = get_value_pair(trimmed[2], reg);
+          rd = get_value_pair(trimmed[1], reg);
+          shamt = 0;
+          // addu rd $0 rt
+          fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(rd<<11)+(shamt<<6)+(33));
+          break;
+        // li rd immed
+        case 1:
+          rt = 0;
+          rd = get_val_pair(trimmed[1], reg);
+          // ori rd $0 immed
+          fprintf(file, "%08x\n", (13<<26)+(rt<<21)+(rd<<16)+(trimmed[i-1]));
+          break;
+        // la rd label
+        case 2: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          // LUI $at, 0x10010000
+          fprintf(file, "%08x\n", (15<<26)+(1<<21)+(268500992));
+          rt = 1;
+          rd = get_value_pair(trimmed[1], reg);
+          // ori rd $at immed
+          fprintf(file, "%08x\n", (13<<26)+(rt<<21)+(rd<<16)+(label_addr));
+          break;
+        // blt rs rt label
+        case 3: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          rs = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[2], reg);
+          //slt $at rs rt
+          fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(1<<11)+(0<<6)+(42));
+          //bne $at $0 label
+          fprintf(file, "%08x\n", (5<<26)+(1<<21)+(0<<16)+(label_addr));
+          break;
+        // ble rs, rt, label
+        case 4: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          rs = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[2], reg);
+          //slt $at rt rs
+          fprintf(file, "%08x\n", (0<<26)+(rt<<26)+(rs<<16)+(1<<11)+(0<<6)+(42));
+          //beq $at $0 label
+          fprintf(file, "%08x\n", (4<<26)+(1<<21)+(0<<16)+(label_addr));
+          break;
+        // bgt rs rt label
+        case 5:
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          rs = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[2], reg);
+          //slt $at rt rs
+          fprintf(file, "%08x\n", (0<<26)+(rt<<26)+(rs<<16)+(1<<11)+(0<<6)+(42));
+          //bne $at $0 label
+          fprintf(file, "%08x\n", (5<<26)+(1<<21)+(0<<16)+(label_addr));
+          break;
+        // bge rs rt label
+        case 6: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          rs = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[2], reg);
+          //slt $at rs rt
+          fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(1<<11)+(0<<6)+(42));
+          //beq $at $0 label
+          fprintf(file, "%08x\n", (4<<26)+(1<<21)+(0<<16)+(label_addr));
+          break;
+        // b label
+        case 7: 
+          label_addr = get_value_labels(trimmed[i-1], labels->labels);
+          //beq $0 $0 label
+          fprintf(file, "%08x\n", (4<<26)+(0<<21)+(0<<21)+(label_addr));
+          break;
+      }
+    // Operate on non-pseudos
+    } else {
+      op = get_value_triplet(trimmed[1], opcode);
+      // Check if valid
+      if (op.val != -1) {
+        // Check if label
+        if (label_addr = get_value_labels(trimmed[i-1], labels->labels) != -1) {
+          // Check LW pseudo condition
+          if (op.val == 19) {
+            // LUI $at, 0x10010000
+            fprintf(file, "%08x\n", (15<<26)+(1<<21)+(268500992));
+            rs = get_value_pair(trimmed[3], reg);
+            rt = get_value_pair(trimmed[2], reg);
+            fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(label_addr));
+          } else {
+            switch (op.val) {
+              case 1:
+                rs = get_value_pair(trimmed[3], reg);
+                rt = get_value_pair(trimmed[2], reg);
+                fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(label_addr));
+                break;
+              case 2:
+                fprintf(file, "%08x\n", (op.val<<26)+(label_addr));
+                break;
+            }
+          }
+        // Operate on non-label
+        } else {
+          switch (op.val) {
+            case 0: break;
+              switch(func) {
+                case (0|2|3|4|6|7):
+                  rs = 0;
+                  rt = get_value_pair(trimmed[3], reg);
+                  rd = get_value_pair(trimmed[2], reg);
+                  shamt = trimmed[i-1];
+                  break;
+                case (8):
+                  rs = get_value_pair(trimmed[2], reg);
+                  rt = 0;
+                  rd = 0;
+                  shamt = 0;
+                  break;
+                case (9):
+                  rs = get_value_pair(trimmed[3], reg);
+                  rt = 0;
+                  rd = get_value_pair(trimmed[2], reg);
+                  shamt = 0;
+                  break;
+                case (32|33|34|35|36|37|38|39|42|43):
+                  rs = get_value_pair(trimmed[3], reg);
+                  rt = get_value_pair(trimmed[4], reg);
+                  rd = get_value_pair(trimmed[2], reg);
+                  shamt = 0;
+                  break;
+              }
+              fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(rd<<11)+(shamt<<6)+(func));
+            case 1:
+              rs = get_value_pair(trimmed[3], reg);
+              rt = get_value_pair(trimmed[2], reg);
+              fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(trimmed[i-1]));
+              break;
+          }
+        }
+      }
+    }
+  }
+  return 0;
 }
