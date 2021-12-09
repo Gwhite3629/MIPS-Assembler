@@ -149,6 +149,10 @@ fail:
         fclose(dat);
     if (ins)
         fclose(ins);
+    for (int j = 0;j<128;j++) {
+        if (labels.labels[j].name)
+            free(labels.labels[j].name);
+    }
     // Return appropriate error, errors defined in file.h
     return ret;
 }

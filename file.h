@@ -18,7 +18,7 @@ typedef struct data {
 
 // Each label in instruction memory, name and label address
 typedef struct label {
-    char name[64];
+    char *name;
     int address;
 } label;
 
@@ -66,11 +66,13 @@ int semitrim(char *line, char **semitrimmed, int *count);
 
 int get_value_pair(char *key, pair *table);
 
+int get_value_labels(char *key, label *labels);
+
 dat get_value_triplet(char *key);
 
-int handle_data(char *trimmed, FILE *file, int *data_num);
+int handle_data(char **trimmed, FILE *file, int *data_num);
 
-int handle_instruction(char *trimmed, FILE *file, labels *labels, int i);
+int handle_instruction(char **trimmed, FILE *file, labels *labels, int i);
 
 // Instruction type
 #define R 0

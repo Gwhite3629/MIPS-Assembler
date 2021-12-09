@@ -62,6 +62,10 @@ int parse(char *line, int line_num, int flag, FILE *file, int *data_num, labels 
   if (line == NULL)
     return 1;
 
+  for (int j = 0;j<128;j++) {
+    labels->labels[j].name = malloc(64);
+  }
+
   //printf("line: \"%s\"\n", line);
 
   ret = trim(line, line_num, flag, labels, data_num, &trimmed);
@@ -73,13 +77,14 @@ int parse(char *line, int line_num, int flag, FILE *file, int *data_num, labels 
     printf("Segment: \"%s\"\n", trimmed[i]);
     i++;
   }
-
+  i--;
   switch (flag) {
     case 0:
       handle_data(trimmed, file, data_num);
       break;
     case 1: break;
     case 2:
+      printf("instruction\n");
       handle_instruction(trimmed, file, labels, i);
       break;
   }
@@ -284,7 +289,7 @@ triplet opcode[43] = {{"add", {0, R}},    {"addu", {0, R}},  {"and", {0, R}},   
                       {"ll", {28, I}},    {"lwcl", {29, I}}, {"sc", {30, I}},   {"swcl", {31, I}}};
 
 // Function code definitions
-pair func[26] = {{"sll", 0}, {"srl", 2},  {"sra", 3},  {"sllv", 4},
+pair funct[26] = {{"sll", 0}, {"srl", 2},  {"sra", 3},  {"sllv", 4},
                  {"srlv", 6},{"srav", 7}, {"jr", 8},   {"jalr", 9},
                  {"mfhi", 16},{"mthi", 17}, {"mflo", 18}, {"mtlo", 19},
                  {"mult", 24},{"multu", 25},{"div", 26},  {"divu", 27},
@@ -304,7 +309,7 @@ static int compare_keys_pair(const void *va, const void *vb) {
 
 static int compare_keys_triplet(const void *va, const void *vb) {
   const triplet *a = va, *b = vb;
-  return strcmp(a->key, b-> key);
+  return strcmp(a->key, b->key);
 }
 
 static int compare_keys_label(const void *va, const void *vb) {
@@ -324,26 +329,26 @@ int get_value_labels(char *key, label *labels){
   return l ? l->address : -1;
 }
 
-dat get_value_tripet(char *key){
+dat get_value_triplet(char *key){
   dat r = {-1, -1};
   triplet key_pair[1] = {{key}};
   triplet *t = bsearch(key_pair, opcode, sizeof opcode / sizeof opcode[0], sizeof opcode, compare_keys_triplet);
   return t ? t->data : r;
 }
 
-int handle_data(char *trimmed, FILE *file, int *data_num) {
+int handle_data(char **trimmed, FILE *file, int *data_num) {
   int i = 0;
   while (trimmed[i] != NULL) {
-    if (strcspn(trimmed, "0123456789")!=strlen(trimmed)) {
+    if (strcspn(trimmed[i], "0123456789")!=strlen(trimmed[i])) {
       (*data_num)++;
-      fprintf(file, "%08x\n", strtol(trimmed, NULL, 10));
+      fprintf(file, "%08x\n", strtol(trimmed[i], NULL, 10));
     }
     i++;
   }
   return 0;
 }
 
-int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
+int handle_instruction(char **trimmed, FILE *file, labels *labels, int i) {
   int chk = 0;
   int label_addr = 0;
   int rs;
@@ -355,7 +360,8 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
   // Check if line is not just a label
   if (i > 1 & (strcspn(trimmed[0], ":") == strlen(trimmed[0]))) {
     // Check if opcode is a pseudo-instruction, note: fails on labels
-    if (chk = get_value_pair(trimmed[0], pseudo) != -1) {
+    chk = get_value_pair(trimmed[0], pseudo);
+    if (chk != -1) {
       switch (chk) {
         // move rd rt
         case 0:
@@ -369,7 +375,7 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
         // li rd immed
         case 1:
           rt = 0;
-          rd = get_val_pair(trimmed[1], reg);
+          rd = get_value_pair(trimmed[1], reg);
           // ori rd $0 immed
           fprintf(file, "%08x\n", (13<<26)+(rt<<21)+(rd<<16)+(trimmed[i-1]));
           break;
@@ -436,13 +442,27 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
       // Confirms opcode is valid
       if (op.val != -1) {
         // Operates on instructions with labels
-        if (label_addr = get_value_labels(trimmed[i-1], labels->labels) != -1) {
+        label_addr = get_value_labels(trimmed[i-1], labels->labels);
+        if (label_addr != -1) {
           // Check LW pseudo condition
           if (op.val == 19) {
             // LUI $at, 0x10010000
             fprintf(file, "%08x\n", (15<<26)+(1<<21)+(268500992));
             rs = get_value_pair(trimmed[2], reg);
             rt = get_value_pair(trimmed[1], reg);
+            fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(label_addr));
+          // Check branches with numeric comparisons
+          } else if ((op.val == 4 && (get_value_pair(trimmed[2], reg) == -1)) || (op.val == 5 && (get_value_pair(trimmed[2], reg) == -1))) {
+            //add $at $0 val
+            rd = 1;
+            rs = 0;
+            rt = strtol(trimmed[2], NULL, 10);
+            shamt = 0;
+            func = 32;
+            fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(rd<<11)+(shamt<<6)+(func));
+            //B(eq,ne) rs $at label
+            rs = get_value_pair(trimmed[1], reg);
+            rt = 1;
             fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(label_addr));
           } else {
             switch (op.val) {
@@ -461,13 +481,13 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
           switch (op.type) {
             // R-type
             case 0: break;
-              func = get_value_pair(trimmed[0], func);
+              func = get_value_pair(trimmed[0], funct);
               switch(func) {
                 case (0|2|3|4|6|7):
                   rs = 0;
                   rt = get_value_pair(trimmed[2], reg);
                   rd = get_value_pair(trimmed[1], reg);
-                  shamt = trimmed[i-1];
+                  shamt = strtol(trimmed[i-1], NULL, 10);
                   break;
                 case (8):
                   rs = get_value_pair(trimmed[1], reg);
@@ -491,6 +511,7 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
               fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(rd<<11)+(shamt<<6)+(func));
             // I-type
             case 1: 
+              if (op.val == 19 || op.val == 26);
               rs = get_value_pair(trimmed[2], reg);
               rt = get_value_pair(trimmed[1], reg);
               fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(trimmed[i-1]));
@@ -502,13 +523,14 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
   // If first word of line was a label, opcode is second
   } else if (i > 1) {
     // Find pseudos
-    if (chk = get_value_pair(trimmed[1], pseudo) != -1) {
+    chk = get_value_pair(trimmed[1], pseudo);
+    if (chk != -1) {
       switch (chk) {
         // move rd rt
         case 0:
           rs = 0;
-          rt = get_value_pair(trimmed[2], reg);
-          rd = get_value_pair(trimmed[1], reg);
+          rt = get_value_pair(trimmed[3], reg);
+          rd = get_value_pair(trimmed[2], reg);
           shamt = 0;
           // addu rd $0 rt
           fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(rd<<11)+(shamt<<6)+(33));
@@ -516,7 +538,7 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
         // li rd immed
         case 1:
           rt = 0;
-          rd = get_val_pair(trimmed[1], reg);
+          rd = get_value_pair(trimmed[2], reg);
           // ori rd $0 immed
           fprintf(file, "%08x\n", (13<<26)+(rt<<21)+(rd<<16)+(trimmed[i-1]));
           break;
@@ -526,15 +548,15 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
           // LUI $at, 0x10010000
           fprintf(file, "%08x\n", (15<<26)+(1<<21)+(268500992));
           rt = 1;
-          rd = get_value_pair(trimmed[1], reg);
+          rd = get_value_pair(trimmed[2], reg);
           // ori rd $at immed
           fprintf(file, "%08x\n", (13<<26)+(rt<<21)+(rd<<16)+(label_addr));
           break;
         // blt rs rt label
         case 3: 
           label_addr = get_value_labels(trimmed[i-1], labels->labels);
-          rs = get_value_pair(trimmed[1], reg);
-          rt = get_value_pair(trimmed[2], reg);
+          rs = get_value_pair(trimmed[2], reg);
+          rt = get_value_pair(trimmed[3], reg);
           //slt $at rs rt
           fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(1<<11)+(0<<6)+(42));
           //bne $at $0 label
@@ -543,8 +565,8 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
         // ble rs, rt, label
         case 4: 
           label_addr = get_value_labels(trimmed[i-1], labels->labels);
-          rs = get_value_pair(trimmed[1], reg);
-          rt = get_value_pair(trimmed[2], reg);
+          rs = get_value_pair(trimmed[2], reg);
+          rt = get_value_pair(trimmed[3], reg);
           //slt $at rt rs
           fprintf(file, "%08x\n", (0<<26)+(rt<<26)+(rs<<16)+(1<<11)+(0<<6)+(42));
           //beq $at $0 label
@@ -553,8 +575,8 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
         // bgt rs rt label
         case 5:
           label_addr = get_value_labels(trimmed[i-1], labels->labels);
-          rs = get_value_pair(trimmed[1], reg);
-          rt = get_value_pair(trimmed[2], reg);
+          rs = get_value_pair(trimmed[2], reg);
+          rt = get_value_pair(trimmed[3], reg);
           //slt $at rt rs
           fprintf(file, "%08x\n", (0<<26)+(rt<<26)+(rs<<16)+(1<<11)+(0<<6)+(42));
           //bne $at $0 label
@@ -563,8 +585,8 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
         // bge rs rt label
         case 6: 
           label_addr = get_value_labels(trimmed[i-1], labels->labels);
-          rs = get_value_pair(trimmed[1], reg);
-          rt = get_value_pair(trimmed[2], reg);
+          rs = get_value_pair(trimmed[2], reg);
+          rt = get_value_pair(trimmed[3], reg);
           //slt $at rs rt
           fprintf(file, "%08x\n", (0<<26)+(rs<<21)+(rt<<16)+(1<<11)+(0<<6)+(42));
           //beq $at $0 label
@@ -579,17 +601,30 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
       }
     // Operate on non-pseudos
     } else {
-      op = get_value_triplet(trimmed[1], opcode);
+      op = get_value_triplet(trimmed[1]);
       // Check if valid
       if (op.val != -1) {
         // Check if label
-        if (label_addr = get_value_labels(trimmed[i-1], labels->labels) != -1) {
+        label_addr = get_value_labels(trimmed[i-1], labels->labels);
+        if (label_addr != -1) {
           // Check LW pseudo condition
           if (op.val == 19) {
             // LUI $at, 0x10010000
             fprintf(file, "%08x\n", (15<<26)+(1<<21)+(268500992));
             rs = get_value_pair(trimmed[3], reg);
             rt = get_value_pair(trimmed[2], reg);
+            fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(label_addr));
+          } else if ((op.val == 4 && (get_value_pair(trimmed[3], reg) == -1)) || (op.val == 5 && (get_value_pair(trimmed[3], reg) == -1))) {
+            //add $at $0 val
+            rd = 1;
+            rs = 0;
+            rt = strtol(trimmed[3], NULL, 10);
+            shamt = 0;
+            func = 32;
+            fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(rd<<11)+(shamt<<6)+(func));
+            //B(eq,ne) rs $at label
+            rs = get_value_pair(trimmed[2], reg);
+            rt = 1;
             fprintf(file, "%08x\n", (op.val<<26)+(rs<<21)+(rt<<16)+(label_addr));
           } else {
             switch (op.val) {
@@ -606,13 +641,14 @@ int handle_instruction(char *trimmed, FILE *file, labels *labels, int i) {
         // Operate on non-label
         } else {
           switch (op.val) {
-            case 0: break;
+            case 0:
+              func = get_value_pair(trimmed[1], funct);
               switch(func) {
                 case (0|2|3|4|6|7):
                   rs = 0;
                   rt = get_value_pair(trimmed[3], reg);
                   rd = get_value_pair(trimmed[2], reg);
-                  shamt = trimmed[i-1];
+                  shamt = strtol(trimmed[i-1], NULL, 10);
                   break;
                 case (8):
                   rs = get_value_pair(trimmed[2], reg);
