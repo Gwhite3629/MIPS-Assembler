@@ -319,12 +319,14 @@ static int compare_keys_label(const void *va, const void *vb) {
 
 int get_value_pair(char *key, pair *table){
   pair key_pair[1] = {{key}};
+  qsort(table, sizeof table / sizeof table[0], sizeof table, compare_keys_pair);
   pair *p = bsearch(key_pair, table, sizeof table / sizeof table[0], sizeof table, compare_keys_pair);
   return p ? p->val : -1;
 }
 
 int get_value_labels(char *key, label *labels){
   label key_pair[1] = {{key}};
+  qsort(labels, sizeof labels / sizeof labels[0], sizeof labels, compare_keys_label);
   label *l = bsearch(key_pair, labels, sizeof labels / sizeof labels[0], sizeof labels, compare_keys_label);
   return l ? l->address : -1;
 }
@@ -332,6 +334,7 @@ int get_value_labels(char *key, label *labels){
 dat get_value_triplet(char *key){
   dat r = {-1, -1};
   triplet key_pair[1] = {{key}};
+  qsort(opcode, sizeof opcode / sizeof opcode[0], sizeof opcode, compare_keys_triplet);
   triplet *t = bsearch(key_pair, opcode, sizeof opcode / sizeof opcode[0], sizeof opcode, compare_keys_triplet);
   return t ? t->data : r;
 }
