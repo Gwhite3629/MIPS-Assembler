@@ -26,7 +26,7 @@ int main(void)
     labels.num = 0;
 
     // Allocate strings
-    locator = malloc(10 * sizeof(char));
+    locator = malloc(64 * sizeof(char));
     if (locator == NULL)
     {
         perror("memory error");
@@ -44,7 +44,7 @@ int main(void)
 
 
     // Set up for data write
-    locator = ".data\n";
+    sprintf(locator, ".data\n");
     // Open source file
     char fname[64];
     printf("Type name of file to open:\n");
@@ -82,7 +82,7 @@ int main(void)
 
 
     // Setup for label read
-    locator = ".text\n";
+    sprintf(locator, ".text\n");
     rewind(input);
     flag  = 1;
     exit = 0;
@@ -113,7 +113,7 @@ int main(void)
     }
 
     // Write actual instructions
-    locator = ".text\n";
+    sprintf(locator, ".text\n");
     rewind(input);
     flag = 2;
     exit = 0;
