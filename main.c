@@ -1,9 +1,12 @@
 #include "file.h"
+#include "utils.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <stdbool.h>
+#include <errno.h>
 
 int main(void)
 {
@@ -26,22 +29,9 @@ int main(void)
     labels.num = 0;
 
     // Allocate strings
-    locator = malloc(64 * sizeof(char));
-    if (locator == NULL)
-    {
-        perror("memory error");
-        ret = -1;
-        goto fail;
-    }
+    MEM(locator, 64, char);
 
-    buf = malloc(256 * sizeof(char));
-    if (buf == NULL)
-    {
-        perror("memory error");
-        ret = -1;
-        goto fail;
-    }
-
+    MEM(buf, 256, char);
 
     // Set up for data write
     sprintf(locator, ".data\n");
@@ -49,15 +39,13 @@ int main(void)
     char fname[64];
     printf("Type name of file to open:\n");
     scanf("%s",fname);
-    input = fopen(fname, "r");
-    if (input == NULL)
-        goto fail;
+    VALID((input = fopen(fname, "r")), FILE_CODE, FILE_OPEN);
+
     // Find .data
-    ret = find_event(input, mark, locator);
+    CHECK((ret = find_event(input, mark, locator)));
     // Open data file
-    dat = fopen("dat.txt", "w");
-    if (dat == NULL)
-        goto fail;
+    VALID((dat = fopen("dat.txt", "w")), FILE_CODE, FILE_OPEN);
+
     int skip = 0;
     // Read through data section
     while (exit != 1)
@@ -78,8 +66,6 @@ int main(void)
     }
     printf("Exited\n");
     // Close data file
-    fclose(dat);
-
 
     // Setup for label read
     sprintf(locator, ".text\n");
@@ -88,11 +74,10 @@ int main(void)
     exit = 0;
     line_num = 0;
     // Find .text
-    ret = find_event(input, mark, locator);
+    CHECK((ret = find_event(input, mark, locator)));
     // Open instruction file
-    ins = fopen("ins.txt", "w");
-    if (ins == NULL)
-        goto fail;
+    VALID((ins = fopen("ins.txt", "w")), FILE_CODE, FILE_OPEN);
+
     skip = 0;
     // Read through instruction section
     while (exit != 1)
@@ -118,7 +103,7 @@ int main(void)
     flag = 2;
     exit = 0;
     line_num = 0;
-    ret = find_event(input, mark, locator);
+    CHECK((ret = find_event(input, mark, locator)));
     skip = 0;
     while (exit != 1) {
         if (fgets(buf, 256, input) == NULL)
@@ -139,7 +124,7 @@ int main(void)
         printf("Labels: %s, Address: %d\n", labels.labels[j].name, labels.labels[j].address);
     }
 
-fail:
+exit:
     // Check memory and files and free or close
     if (locator)
         free(locator);
